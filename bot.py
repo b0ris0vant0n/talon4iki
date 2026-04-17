@@ -41,6 +41,8 @@ class CheckResult:
 
 
 CHECK_BUTTON_TEXT = "Проверить талоны"
+BOOK_APPOINTMENT_YES = "book_appointment_yes"
+BOOK_APPOINTMENT_NO = "book_appointment_no"
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -194,10 +196,11 @@ def send_telegram_message(
     chat_id: str,
     text: str,
     with_keyboard: bool = False,
+    reply_markup: Optional[dict] = None,
 ) -> None:
-    reply_markup = None
-    if with_keyboard:
-        reply_markup = {
+    resolved_reply_markup = reply_markup
+    if with_keyboard and resolved_reply_markup is None:
+        resolved_reply_markup = {
             "keyboard": [[{"text": CHECK_BUTTON_TEXT}]],
             "resize_keyboard": True,
         }
@@ -207,7 +210,7 @@ def send_telegram_message(
         json={
             "chat_id": chat_id,
             "text": text,
-            **({"reply_markup": reply_markup} if reply_markup else {}),
+            **({"reply_markup": resolved_reply_markup} if resolved_reply_markup else {}),
         },
         timeout=20,
         proxies=telegram_proxies(),
@@ -229,6 +232,56 @@ def send_bot_menu(bot_token: str, chat_id: str) -> None:
         ),
         with_keyboard=True,
     )
+
+
+def send_booking_prompt(bot_token: str, chat_id: str) -> None:
+    send_telegram_message(
+        bot_token,
+        chat_id,
+        "✅ Талоны есть. Записаться?",
+        reply_markup={
+            "inline_keyboard": [
+                [
+                    {"text": "Да", "callback_data": BOOK_APPOINTMENT_YES},
+                    {"text": "Нет", "callback_data": BOOK_APPOINTMENT_NO},
+                ]
+            ]
+        },
+    )
+
+
+def send_booking_link(bot_token: str, chat_id: str, referral_number: str, last_name: str) -> None:
+    send_telegram_message(
+        bot_token,
+        chat_id,
+        (
+            "Открой страницу записи.\n"
+            "Надёжную ссылку с уже заполненными полями портал не даёт, поэтому отправляю страницу и данные для копирования.\n\n"
+            f"Номер направления: {referral_number}\n"
+            f"Фамилия: {last_name}"
+        ),
+        reply_markup={
+            "inline_keyboard": [
+                [{"text": "Открыть страницу записи", "url": BASE_URL}],
+            ]
+        },
+    )
+
+
+def answer_callback_query(bot_token: str, callback_query_id: str, text: str = "") -> None:
+    response = requests.post(
+        f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+        json={
+            "callback_query_id": callback_query_id,
+            **({"text": text} if text else {}),
+        },
+        timeout=20,
+        proxies=telegram_proxies(),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("ok"):
+        raise RuntimeError(f"Telegram API error: {payload}")
 
 
 def fetch_referral_data(referral_number: str, last_name: str) -> dict:
@@ -466,6 +519,7 @@ def notify_if_needed(
     bot_token: str,
     chat_id: str,
     referral_number: str,
+    last_name: str,
     notify_on_every_check: bool = False,
 ) -> None:
     state = load_state()
@@ -483,6 +537,7 @@ def notify_if_needed(
                 f"Детали: {result.details}"
             ),
         )
+        send_booking_prompt(bot_token, chat_id)
 
     if notify_on_every_check:
         send_telegram_message(
@@ -529,6 +584,7 @@ def perform_check(
         bot_token,
         chat_id,
         referral_number,
+        last_name,
         notify_on_every_check=notify_on_every_check and not manual,
     )
 
@@ -539,6 +595,8 @@ def perform_check(
             f"Ручная проверка завершена.\n{normalize_status_text(result)}",
             with_keyboard=True,
         )
+        if result.available:
+            send_booking_prompt(bot_token, chat_id)
 
 
 def handle_telegram_updates(
@@ -557,6 +615,30 @@ def handle_telegram_updates(
         update_id = update.get("update_id")
         if update_id is not None:
             next_offset = update_id + 1
+
+        callback_query = update.get("callback_query")
+        if callback_query:
+            callback_id = callback_query.get("id")
+            data = callback_query.get("data", "").strip()
+            message = callback_query.get("message") or {}
+            current_chat_id = str(((message.get("chat") or {}).get("id", "")))
+            if current_chat_id != chat_id:
+                continue
+
+            if data == BOOK_APPOINTMENT_YES:
+                if callback_id:
+                    answer_callback_query(bot_token, callback_id, "Открываю данные для записи")
+                send_booking_link(bot_token, chat_id, referral_number, last_name)
+            elif data == BOOK_APPOINTMENT_NO:
+                if callback_id:
+                    answer_callback_query(bot_token, callback_id, "Хорошо")
+                send_telegram_message(
+                    bot_token,
+                    chat_id,
+                    "Хорошо, запись можно открыть позже кнопкой ручной проверки.",
+                    with_keyboard=True,
+                )
+            continue
 
         message = update.get("message") or update.get("edited_message")
         if not message:
