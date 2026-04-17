@@ -1,0 +1,9 @@
+services:
+  talon-bot:
+    build: .
+    container_name: talon-bot
+    restart: unless-stopped
+    env_file:
+      - .env.server
+    volumes:
+      - ./state.json:/app/state.json
