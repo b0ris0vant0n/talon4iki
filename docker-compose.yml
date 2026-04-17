@@ -1,4 +1,9 @@
 services:
+  tests:
+    build: .
+    container_name: talon-bot-tests
+    command: ["pytest", "-q"]
+
   talon-bot:
     build: .
     container_name: talon-bot
