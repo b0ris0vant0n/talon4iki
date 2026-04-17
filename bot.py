@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import sys
 import time
 import warnings
@@ -15,9 +16,17 @@ warnings.filterwarnings(
 import requests
 from dotenv import load_dotenv
 from urllib3.exceptions import InsecureRequestWarning
+import urllib3.util.connection as urllib3_connection
 
 
 warnings.simplefilter("ignore", InsecureRequestWarning)
+
+
+def force_ipv4():
+    return socket.AF_INET
+
+
+urllib3_connection.allowed_gai_family = force_ipv4
 
 
 BASE_URL = "https://gorzdrav.spb.ru/service-referral-schedule"
