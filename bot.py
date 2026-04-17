@@ -67,6 +67,17 @@ def telegram_proxies() -> Optional[dict]:
     }
 
 
+def normalize_status_text(result: CheckResult) -> str:
+    status = "Есть свободные талоны." if result.available else "Свободных талонов пока нет."
+    emoji = "✅" if result.available else "❌"
+    decorated_status = f"{emoji} {status}"
+    if result.details.startswith(decorated_status):
+        return result.details
+    if result.details.startswith(status):
+        return f"{emoji} {result.details}"
+    return f"{decorated_status}\n{result.details}"
+
+
 def normalize_referral_number(referral_number: str) -> str:
     return "".join(char for char in referral_number if char.isdigit())
 
@@ -450,7 +461,13 @@ def check_slots(referral_number: str, last_name: str, headless: bool) -> CheckRe
         )
 
 
-def notify_if_needed(result: CheckResult, bot_token: str, chat_id: str, referral_number: str) -> None:
+def notify_if_needed(
+    result: CheckResult,
+    bot_token: str,
+    chat_id: str,
+    referral_number: str,
+    notify_on_every_check: bool = False,
+) -> None:
     state = load_state()
     previous_status = state.get("last_status")
     current_status = "available" if result.available else "unavailable"
@@ -461,10 +478,22 @@ def notify_if_needed(result: CheckResult, bot_token: str, chat_id: str, referral
             bot_token,
             chat_id,
             (
-                "Появились свободные талоны на gorzdrav.spb.ru.\n"
+                "✅ Появились свободные талоны на gorzdrav.spb.ru.\n"
                 f"Направление: {referral_number}\n"
                 f"Детали: {result.details}"
             ),
+        )
+
+    if notify_on_every_check:
+        send_telegram_message(
+            bot_token,
+            chat_id,
+            (
+                "Автоматическая проверка завершена.\n"
+                f"Направление: {referral_number}\n"
+                f"{normalize_status_text(result)}"
+            ),
+            with_keyboard=True,
         )
 
     state["last_status"] = current_status
@@ -491,17 +520,23 @@ def perform_check(
     chat_id: str,
     headless: bool,
     manual: bool = False,
+    notify_on_every_check: bool = False,
 ) -> None:
     result = check_slots(referral_number, last_name, headless=headless)
     print(result.details)
-    notify_if_needed(result, bot_token, chat_id, referral_number)
+    notify_if_needed(
+        result,
+        bot_token,
+        chat_id,
+        referral_number,
+        notify_on_every_check=notify_on_every_check and not manual,
+    )
 
     if manual:
-        status = "Есть свободные талоны." if result.available else "Свободных талонов пока нет."
         send_telegram_message(
             bot_token,
             chat_id,
-            f"Ручная проверка завершена.\n{status}\n{result.details}",
+            f"Ручная проверка завершена.\n{normalize_status_text(result)}",
             with_keyboard=True,
         )
 
@@ -512,6 +547,7 @@ def handle_telegram_updates(
     referral_number: str,
     last_name: str,
     headless: bool,
+    notify_on_every_check: bool,
 ) -> None:
     offset = load_offset()
     updates = get_updates(bot_token, offset=offset, timeout=0)
@@ -547,6 +583,7 @@ def handle_telegram_updates(
                 chat_id,
                 headless,
                 manual=True,
+                notify_on_every_check=notify_on_every_check,
             )
 
     if next_offset is not None:
@@ -562,6 +599,7 @@ def main() -> int:
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     headless = env_bool("HEADLESS", True)
     interval_minutes = env_int("CHECK_INTERVAL_MINUTES", 10)
+    notify_on_every_check = env_bool("NOTIFY_ON_EVERY_CHECK", False)
 
     if not referral_number or not last_name or not bot_token:
         print("Нужно заполнить REFERRAL_NUMBER, LAST_NAME и TELEGRAM_BOT_TOKEN в .env")
@@ -591,6 +629,7 @@ def main() -> int:
                     chat_id,
                     headless,
                     manual=False,
+                    notify_on_every_check=notify_on_every_check,
                 )
                 next_check_at = time.time() + interval_minutes * 60
 
@@ -603,6 +642,7 @@ def main() -> int:
                 referral_number,
                 last_name,
                 headless,
+                notify_on_every_check,
             )
         except KeyboardInterrupt:
             print("Остановлено пользователем.")
