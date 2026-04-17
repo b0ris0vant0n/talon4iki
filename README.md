@@ -38,6 +38,7 @@ cp .env.example .env
 - `LAST_NAME`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID` — если не знаешь, оставь пустым, сначала напиши любое сообщение своему боту, потом скрипт сам попробует взять `chat_id` из последних обновлений.
+- `TELEGRAM_PROXY` — необязательно. Если сервер не может достучаться до Telegram напрямую, укажи HTTP/HTTPS-прокси, например `http://login:password@host:port`.
 
 5. Разовая проверка:
 
@@ -71,6 +72,7 @@ cp .env.example .env.server
 - `LAST_NAME`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `TELEGRAM_PROXY` — необязательно, только если нужен прокси для Telegram API
 - `CHECK_INTERVAL_MINUTES`
 
 `.env.server` не должен попадать в репозиторий: это серверный файл с реальными секретами.

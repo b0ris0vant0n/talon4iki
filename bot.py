@@ -57,6 +57,16 @@ def env_int(name: str, default: int) -> int:
     return int(value)
 
 
+def telegram_proxies() -> Optional[dict]:
+    proxy = os.getenv("TELEGRAM_PROXY", "").strip()
+    if not proxy:
+        return None
+    return {
+        "http": proxy,
+        "https": proxy,
+    }
+
+
 def normalize_referral_number(referral_number: str) -> str:
     return "".join(char for char in referral_number if char.isdigit())
 
@@ -128,6 +138,7 @@ def get_latest_chat_id(bot_token: str) -> Optional[str]:
     response = requests.get(
         f"https://api.telegram.org/bot{bot_token}/getUpdates",
         timeout=20,
+        proxies=telegram_proxies(),
     )
     response.raise_for_status()
     payload = response.json()
@@ -158,6 +169,7 @@ def get_updates(bot_token: str, offset: Optional[int] = None, timeout: int = 0) 
         f"https://api.telegram.org/bot{bot_token}/getUpdates",
         params=params,
         timeout=timeout + 20,
+        proxies=telegram_proxies(),
     )
     response.raise_for_status()
     payload = response.json()
@@ -187,6 +199,7 @@ def send_telegram_message(
             **({"reply_markup": reply_markup} if reply_markup else {}),
         },
         timeout=20,
+        proxies=telegram_proxies(),
     )
     response.raise_for_status()
     payload = response.json()
