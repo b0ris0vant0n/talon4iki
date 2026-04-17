@@ -9,6 +9,6 @@ services:
     container_name: talon-bot
     restart: unless-stopped
     env_file:
-      - .env.server
+      - ${BOT_ENV_FILE:-.env.server}
     volumes:
       - ./state.json:/app/state.json
