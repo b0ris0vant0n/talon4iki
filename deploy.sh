@@ -9,7 +9,7 @@ fi
 export BOT_ENV_FILE="$ENV_FILE"
 
 echo "[1/3] Building image and running tests..."
-docker compose run --rm tests
+docker compose --profile test run --rm tests
 
 echo "[2/3] Recreating bot container..."
 docker compose down

@@ -2,6 +2,7 @@ services:
   tests:
     build: .
     container_name: talon-bot-tests
+    profiles: ["test"]
     command: ["pytest", "-q"]
 
   talon-bot:

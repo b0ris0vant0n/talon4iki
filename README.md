@@ -98,7 +98,7 @@ docker compose logs -f
 Перед обычным деплоем можно прогнать тесты в Docker:
 
 ```bash
-docker compose run --rm tests
+docker compose --profile test run --rm tests
 ```
 
 Или использовать готовый скрипт:
